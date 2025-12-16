@@ -15,6 +15,8 @@ func main() {
 	host := flag.String("host", "localhost", "OBS WebSocket host")
 	port := flag.String("port", "4455", "OBS WebSocket port")
 	csvFile := flag.String("csv", "", "Optional CSV file to write metrics to")
+	metricIntervalMs := flag.Int("metric-interval", 1000, "Metric collection interval in milliseconds (default 1000ms)")
+	writerIntervalMs := flag.Int("writer-interval", 1000, "Writer interval in milliseconds (default 1000ms)")
 	flag.Parse()
 
 	if *password == "" {
@@ -23,10 +25,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *metricIntervalMs > *writerIntervalMs {
+		fmt.Printf("Error: metric interval (%dms) cannot be higher than writer interval (%dms)\n", *metricIntervalMs, *writerIntervalMs)
+		os.Exit(1)
+	}
+
 	monitor, err := monitor.NewMonitor(monitor.ObsConnectionInfo{
-		Host:     fmt.Sprintf("%s:%s", *host, *port),
-		Password: *password,
-		CSVFile:  *csvFile,
+		Host:           fmt.Sprintf("%s:%s", *host, *port),
+		Password:       *password,
+		CSVFile:        *csvFile,
+		MetricInterval: *metricIntervalMs,
+		WriterInterval: *writerIntervalMs,
 	})
 	if err != nil {
 		panic(err)
@@ -38,6 +47,7 @@ func main() {
 	err = monitor.Start()
 	if err != nil {
 		fmt.Printf("Monitor error: %v\n", err)
+		os.Exit(1)
 	}
 
 	waitForExit()

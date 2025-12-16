@@ -7,4 +7,4 @@ It's used for monitoring low latency streams so we use a measurement interval of
 
 ## Code style
 - Be very sparse with comments. Only add them when the code is not self-explanatory.
-
+- Use idiomatic Go.

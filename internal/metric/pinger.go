@@ -2,14 +2,18 @@ package metric
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	probing "github.com/prometheus-community/pro-bing"
 )
 
 type Pinger struct {
-	domain      string
-	metricsChan chan PingMetrics
+	domain    string
+	maxRTT    time.Duration
+	lastError error
+	mu        sync.Mutex
+	interval  time.Duration
 }
 
 type PingMetrics struct {
@@ -18,37 +22,42 @@ type PingMetrics struct {
 	Error     error
 }
 
-func NewPinger(domain string) (*Pinger, error) {
+func NewPinger(domain string, interval time.Duration) (*Pinger, error) {
 	return &Pinger{
-		domain:      domain,
-		metricsChan: make(chan PingMetrics, 10),
+		domain:   domain,
+		interval: interval,
 	}, nil
 }
 
-func (p *Pinger) GetMetricsChan() <-chan PingMetrics {
-	return p.metricsChan
+func (p *Pinger) GetAndResetMaxRTT() (time.Duration, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	maxRTT := p.maxRTT
+	err := p.lastError
+
+	p.maxRTT = 0
+	p.lastError = nil
+
+	return maxRTT, err
 }
 
 func (p *Pinger) Start() error {
-	fmt.Printf("Pinging %s\n", p.domain)
+	fmt.Printf("Pinging %s every %v\n", p.domain, p.interval)
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		go func() {
-			timestamp := time.Now()
-			rtt, err := p.ping(p.domain)
+		rtt, err := p.ping(p.domain)
 
-			select {
-			case p.metricsChan <- PingMetrics{
-				Timestamp: timestamp,
-				RTT:       rtt,
-				Error:     err,
-			}:
-			default:
-			}
-		}()
+		p.mu.Lock()
+		if err != nil {
+			p.lastError = err
+		} else if rtt > p.maxRTT {
+			p.maxRTT = rtt
+		}
+		p.mu.Unlock()
 	}
 
 	return nil

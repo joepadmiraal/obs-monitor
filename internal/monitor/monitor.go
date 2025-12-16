@@ -12,9 +12,11 @@ import (
 )
 
 type ObsConnectionInfo struct {
-	Password string
-	Host     string
-	CSVFile  string
+	Password       string
+	Host           string
+	CSVFile        string
+	MetricInterval int
+	WriterInterval int
 }
 
 type Monitor struct {
@@ -25,6 +27,8 @@ type Monitor struct {
 	streamMetrics  *metric.StreamMetrics
 	csvWriter      *writer.CSVWriter
 	consoleWriter  *writer.ConsoleWriter
+	metricInterval time.Duration
+	writerInterval time.Duration
 }
 
 // NewMonitor Connects to OBS and
@@ -32,6 +36,8 @@ func NewMonitor(connectionInfo ObsConnectionInfo) (*Monitor, error) {
 
 	return &Monitor{
 		connectionInfo: connectionInfo,
+		metricInterval: time.Duration(connectionInfo.MetricInterval) * time.Millisecond,
+		writerInterval: time.Duration(connectionInfo.WriterInterval) * time.Millisecond,
 	}, nil
 }
 
@@ -73,7 +79,7 @@ func (m *Monitor) Start() error {
 	}
 
 	// Initialize stream metrics
-	m.streamMetrics, err = metric.NewStreamMetrics(m.client)
+	m.streamMetrics, err = metric.NewStreamMetrics(m.client, m.metricInterval)
 	if err != nil {
 		return fmt.Errorf("failed to initialize stream metrics: %w", err)
 	}
@@ -108,12 +114,12 @@ func (m *Monitor) Start() error {
 func (m *Monitor) initializePingers(obsDomain string) error {
 	var err error
 
-	m.obsPinger, err = metric.NewPinger(obsDomain)
+	m.obsPinger, err = metric.NewPinger(obsDomain, m.metricInterval)
 	if err != nil {
 		return fmt.Errorf("failed to initialize OBS pinger: %w", err)
 	}
 
-	m.googlePinger, err = metric.NewPinger("google.com")
+	m.googlePinger, err = metric.NewPinger("google.com", m.metricInterval)
 	if err != nil {
 		return fmt.Errorf("failed to initialize Google pinger: %w", err)
 	}
@@ -156,61 +162,30 @@ func (m *Monitor) Close() {
 
 // collectAndWriteMetrics collects metrics from both pingers and stream metrics and writes to CSV
 func (m *Monitor) collectAndWriteMetrics() {
-	var lastObsPingMetrics metric.PingMetrics
-	var lastGooglePingMetrics metric.PingMetrics
-	var lastStreamMetrics metric.StreamMetricsData
-	var haveObsPing, haveGooglePing, haveStream bool
-
-	obsPingChan := m.obsPinger.GetMetricsChan()
-	googlePingChan := m.googlePinger.GetMetricsChan()
-	streamChan := m.streamMetrics.GetMetricsChan()
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(m.writerInterval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case obsPingMetrics := <-obsPingChan:
-			lastObsPingMetrics = obsPingMetrics
-			haveObsPing = true
+	for range ticker.C {
+		obsRTT, obsErr := m.obsPinger.GetAndResetMaxRTT()
+		googleRTT, googleErr := m.googlePinger.GetAndResetMaxRTT()
+		maxBytes, maxSkipped, active, streamErr := m.streamMetrics.GetAndResetMaxValues()
 
-		case googlePingMetrics := <-googlePingChan:
-			lastGooglePingMetrics = googlePingMetrics
-			haveGooglePing = true
-
-		case streamMetrics := <-streamChan:
-			lastStreamMetrics = streamMetrics
-			haveStream = true
-
-		case <-ticker.C:
-			// Write metrics once per second with the latest data from all sources
-			if haveObsPing || haveGooglePing || haveStream {
-				m.writeMetrics(lastObsPingMetrics, lastGooglePingMetrics, lastStreamMetrics)
-			}
-		}
+		m.writeMetrics(obsRTT, obsErr, googleRTT, googleErr, active, maxBytes, maxSkipped, streamErr)
 	}
 }
 
 // writeMetrics writes a combined metrics row to CSV and console
-func (m *Monitor) writeMetrics(obsPingMetrics metric.PingMetrics, googlePingMetrics metric.PingMetrics, streamMetrics metric.StreamMetricsData) {
-	// Use the more recent timestamp
-	timestamp := obsPingMetrics.Timestamp
-	if googlePingMetrics.Timestamp.After(timestamp) {
-		timestamp = googlePingMetrics.Timestamp
-	}
-	if streamMetrics.Timestamp.After(timestamp) {
-		timestamp = streamMetrics.Timestamp
-	}
-
+func (m *Monitor) writeMetrics(obsRTT time.Duration, obsErr error, googleRTT time.Duration, googleErr error, active bool, outputBytes float64, skippedFrames float64, streamErr error) {
 	data := writer.MetricsData{
-		Timestamp:           timestamp,
-		ObsRTT:              obsPingMetrics.RTT,
-		ObsPingError:        obsPingMetrics.Error,
-		GoogleRTT:           googlePingMetrics.RTT,
-		GooglePingError:     googlePingMetrics.Error,
-		StreamActive:        streamMetrics.Active,
-		OutputBytes:         streamMetrics.OutputBytes,
-		OutputSkippedFrames: streamMetrics.OutputSkippedFrames,
-		StreamError:         streamMetrics.Error,
+		Timestamp:           time.Now(),
+		ObsRTT:              obsRTT,
+		ObsPingError:        obsErr,
+		GoogleRTT:           googleRTT,
+		GooglePingError:     googleErr,
+		StreamActive:        active,
+		OutputBytes:         outputBytes,
+		OutputSkippedFrames: skippedFrames,
+		StreamError:         streamErr,
 	}
 
 	// Write to CSV if enabled
