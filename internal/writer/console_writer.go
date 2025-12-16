@@ -22,7 +22,7 @@ func (cw *ConsoleWriter) WriteMetrics(data MetricsData) error {
 	// Print header on first call
 	if !cw.headerPrinted {
 		fmt.Println("timestamp                 | rtt_ms   | stream_active | output_bytes | output_skipped_frames | errors")
-		fmt.Println("--------------------------|----------|---------------|--------------|----------------------|--------")
+		fmt.Println("--------------------------|----------|---------------|--------------|-----------------------|--------")
 		cw.headerPrinted = true
 	}
 

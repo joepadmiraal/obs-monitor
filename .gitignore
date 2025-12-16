@@ -33,3 +33,4 @@ go.work.sum
 
 # Project specific
 cmd/obs-monitor/obs-monitor
+cmd/obs-monitor/test.csv

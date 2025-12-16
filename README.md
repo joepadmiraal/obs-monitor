@@ -2,10 +2,6 @@
 
 A utility that monitors an OBS Studio instance via a WebSocket connection. Measures stream metrics and network latency with a 1-second measurement interval for low latency stream monitoring.
 
-## References
-- https://github.com/andreykaipov/goobs
-- https://github.com/golang-standards/project-layout
-
 ## Usage
 
 ```bash
@@ -35,3 +31,9 @@ Example:
 ```bash
 obs-monitor -password mypassword -csv metrics.csv
 ```
+
+## Development
+- https://github.com/andreykaipov/goobs
+- https://github.com/golang-standards/project-layout
+
+Tests can be run via `go test ./...`

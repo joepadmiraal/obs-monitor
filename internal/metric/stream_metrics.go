@@ -1,4 +1,4 @@
-package monitor
+package metric
 
 import (
 	"fmt"
@@ -12,7 +12,6 @@ type StreamMetrics struct {
 	metricsChan chan StreamMetricsData
 }
 
-// StreamMetricsData holds stream measurement data
 type StreamMetricsData struct {
 	Timestamp           time.Time
 	Active              bool
@@ -21,7 +20,6 @@ type StreamMetricsData struct {
 	Error               error
 }
 
-// NewStreamMetrics creates a new stream metrics monitor
 func NewStreamMetrics(client *goobs.Client) (*StreamMetrics, error) {
 	return &StreamMetrics{
 		client:      client,
@@ -29,12 +27,10 @@ func NewStreamMetrics(client *goobs.Client) (*StreamMetrics, error) {
 	}, nil
 }
 
-// GetMetricsChan returns the channel for receiving stream metrics
 func (s *StreamMetrics) GetMetricsChan() <-chan StreamMetricsData {
 	return s.metricsChan
 }
 
-// Start begins monitoring stream metrics every second
 func (s *StreamMetrics) Start() error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -54,11 +50,9 @@ func (s *StreamMetrics) Start() error {
 			metricsData.OutputSkippedFrames = status.OutputSkippedFrames
 		}
 
-		// Send metrics to channel
 		select {
 		case s.metricsChan <- metricsData:
 		default:
-			// Channel full, skip this measurement
 		}
 
 		if err != nil {

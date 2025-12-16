@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/andreykaipov/goobs"
-	"github.com/joepadmiraal/obs-monitor/internal/pinger"
+	"github.com/joepadmiraal/obs-monitor/internal/metric"
 	"github.com/joepadmiraal/obs-monitor/internal/writer"
 )
 
@@ -18,8 +18,8 @@ type ObsConnectionInfo struct {
 type Monitor struct {
 	client         *goobs.Client
 	connectionInfo ObsConnectionInfo
-	pinger         *pinger.Pinger
-	streamMetrics  *StreamMetrics
+	pinger         *metric.Pinger
+	streamMetrics  *metric.StreamMetrics
 	csvWriter      *writer.CSVWriter
 	consoleWriter  *writer.ConsoleWriter
 }
@@ -51,13 +51,13 @@ func (m *Monitor) Start() error {
 
 	// Initialize pinger
 	var err error
-	m.pinger, err = pinger.NewPinger(m.client)
+	m.pinger, err = metric.NewPinger(m.client)
 	if err != nil {
 		return fmt.Errorf("failed to initialize pinger: %w", err)
 	}
 
 	// Initialize stream metrics
-	m.streamMetrics, err = NewStreamMetrics(m.client)
+	m.streamMetrics, err = metric.NewStreamMetrics(m.client)
 	if err != nil {
 		return fmt.Errorf("failed to initialize stream metrics: %w", err)
 	}
@@ -119,8 +119,8 @@ func (m *Monitor) Close() {
 
 // collectAndWriteMetrics collects metrics from both pinger and stream metrics and writes to CSV
 func (m *Monitor) collectAndWriteMetrics() {
-	var lastPingMetrics pinger.PingMetrics
-	var lastStreamMetrics StreamMetricsData
+	var lastPingMetrics metric.PingMetrics
+	var lastStreamMetrics metric.StreamMetricsData
 	var havePing, haveStream bool
 
 	pingChan := m.pinger.GetMetricsChan()
@@ -148,7 +148,7 @@ func (m *Monitor) collectAndWriteMetrics() {
 }
 
 // writeMetrics writes a combined metrics row to CSV and console
-func (m *Monitor) writeMetrics(pingMetrics pinger.PingMetrics, streamMetrics StreamMetricsData) {
+func (m *Monitor) writeMetrics(pingMetrics metric.PingMetrics, streamMetrics metric.StreamMetricsData) {
 	// Use the more recent timestamp
 	timestamp := pingMetrics.Timestamp
 	if streamMetrics.Timestamp.After(pingMetrics.Timestamp) {
