@@ -9,14 +9,16 @@ import (
 )
 
 type StreamMetrics struct {
-	client           *goobs.Client
-	metricsChan      chan StreamMetricsData
-	maxOutputBytes   float64
-	maxSkippedFrames float64
-	lastActive       bool
-	lastError        error
-	mu               sync.Mutex
-	interval         time.Duration
+	client            *goobs.Client
+	maxOutputBytes    float64
+	prevOutputBytes   float64
+	maxSkippedFrames  float64
+	prevSkippedFrames float64
+	lastActive        bool
+	lastError         error
+	measurementCount  int
+	mu                sync.Mutex
+	interval          time.Duration
 }
 
 type StreamMetricsData struct {
@@ -34,7 +36,7 @@ func NewStreamMetrics(client *goobs.Client, interval time.Duration) (*StreamMetr
 	}, nil
 }
 
-func (s *StreamMetrics) GetAndResetMaxValues() (float64, float64, bool, error) {
+func (s *StreamMetrics) GetAndResetMaxValues() StreamMetricsData {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -43,11 +45,36 @@ func (s *StreamMetrics) GetAndResetMaxValues() (float64, float64, bool, error) {
 	active := s.lastActive
 	err := s.lastError
 
+	if s.measurementCount < 2 {
+		s.prevOutputBytes = maxBytes
+		s.prevSkippedFrames = maxSkipped
+		s.maxOutputBytes = 0
+		s.maxSkippedFrames = 0
+		s.lastError = nil
+		return StreamMetricsData{
+			Timestamp:           time.Now(),
+			Active:              active,
+			OutputBytes:         0,
+			OutputSkippedFrames: 0,
+			Error:               err,
+		}
+	}
+
+	bytesDelta := maxBytes - s.prevOutputBytes
+	skippedDelta := maxSkipped - s.prevSkippedFrames
+	s.prevOutputBytes = maxBytes
+	s.prevSkippedFrames = maxSkipped
 	s.maxOutputBytes = 0
 	s.maxSkippedFrames = 0
 	s.lastError = nil
 
-	return maxBytes, maxSkipped, active, err
+	return StreamMetricsData{
+		Timestamp:           time.Now(),
+		Active:              active,
+		OutputBytes:         bytesDelta,
+		OutputSkippedFrames: skippedDelta,
+		Error:               err,
+	}
 }
 
 func (s *StreamMetrics) Start() error {
@@ -68,6 +95,7 @@ func (s *StreamMetrics) Start() error {
 			if status.OutputSkippedFrames > s.maxSkippedFrames {
 				s.maxSkippedFrames = status.OutputSkippedFrames
 			}
+			s.measurementCount++
 		}
 		s.mu.Unlock()
 

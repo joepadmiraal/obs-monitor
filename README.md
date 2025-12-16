@@ -1,14 +1,37 @@
 # OBS Monitor
 
-A utility that monitors an OBS Studio instance via a WebSocket connection. Measures stream metrics, network latency and generic performance metrics with a 1-second measurement interval for low latency stream monitoring.
+A utility that monitors an OBS Studio instance via a WebSocket connection. Measures stream metrics, network latency and generic performance metrics.
 
 It connects to OBS via a WebSocket connection.
 All generic metrics are collected from the machine that runs OBS Monitor so it makes sense to run this on the same machine as OBS itself.
+
+It's possible that within one write window, multiple measurements are collected. In which case it will take the max value of the measurements.
 
 ## Usage
 
 ```bash
 obs-monitor -password <password>
+```
+
+Example output
+
+```bash
+Press Ctrl-C to exit
+Pinging google.com every 1s
+Pinging a.rtmp.youtube.com every every 1s
+OBS Studio version: 32.0.4
+Server protocol version: 5.6.3
+Client protocol version: 5.5.6
+Client library version: 1.5.6
+
+timestamp                 | obs_rtt_ms | google_rtt_ms | stream_active | output_bytes | output_skipped_frames | errors
+--------------------------|------------|---------------|---------------|--------------|-----------------------|--------
+2025-12-16T15:07:37+01:00 |       5.80 |          4.59 |          true |       915861 |                     0 | 
+2025-12-16T15:07:38+01:00 |       9.29 |          5.72 |          true |      1009403 |                     0 | 
+2025-12-16T15:07:39+01:00 |       6.43 |          7.03 |          true |      1053680 |                     0 | 
+2025-12-16T15:07:40+01:00 |       9.25 |          6.65 |          true |      1071794 |                     0 | 
+2025-12-16T15:07:41+01:00 |       8.78 |          3.80 |          true |       980014 |                     0 | 
+2025-12-16T15:07:42+01:00 |       7.17 |          3.86 |          true |       823529 |                     0 | 
 ```
 
 ### Flags

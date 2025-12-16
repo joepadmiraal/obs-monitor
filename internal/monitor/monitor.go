@@ -148,7 +148,7 @@ func (m *Monitor) PrintInfo() {
 	fmt.Printf("OBS Studio version: %s\n", version.ObsVersion)
 	fmt.Printf("Server protocol version: %s\n", version.ObsWebSocketVersion)
 	fmt.Printf("Client protocol version: %s\n", goobs.ProtocolVersion)
-	fmt.Printf("Client library version: %s\n", goobs.LibraryVersion)
+	fmt.Printf("Client library version: %s\n\n", goobs.LibraryVersion)
 }
 
 func (m *Monitor) Close() {
@@ -168,24 +168,24 @@ func (m *Monitor) collectAndWriteMetrics() {
 	for range ticker.C {
 		obsRTT, obsErr := m.obsPinger.GetAndResetMaxRTT()
 		googleRTT, googleErr := m.googlePinger.GetAndResetMaxRTT()
-		maxBytes, maxSkipped, active, streamErr := m.streamMetrics.GetAndResetMaxValues()
+		streamData := m.streamMetrics.GetAndResetMaxValues()
 
-		m.writeMetrics(obsRTT, obsErr, googleRTT, googleErr, active, maxBytes, maxSkipped, streamErr)
+		m.writeMetrics(obsRTT, obsErr, googleRTT, googleErr, streamData)
 	}
 }
 
 // writeMetrics writes a combined metrics row to CSV and console
-func (m *Monitor) writeMetrics(obsRTT time.Duration, obsErr error, googleRTT time.Duration, googleErr error, active bool, outputBytes float64, skippedFrames float64, streamErr error) {
+func (m *Monitor) writeMetrics(obsRTT time.Duration, obsErr error, googleRTT time.Duration, googleErr error, streamData metric.StreamMetricsData) {
 	data := writer.MetricsData{
-		Timestamp:           time.Now(),
+		Timestamp:           streamData.Timestamp,
 		ObsRTT:              obsRTT,
 		ObsPingError:        obsErr,
 		GoogleRTT:           googleRTT,
 		GooglePingError:     googleErr,
-		StreamActive:        active,
-		OutputBytes:         outputBytes,
-		OutputSkippedFrames: skippedFrames,
-		StreamError:         streamErr,
+		StreamActive:        streamData.Active,
+		OutputBytes:         streamData.OutputBytes,
+		OutputSkippedFrames: streamData.OutputSkippedFrames,
+		StreamError:         streamData.Error,
 	}
 
 	// Write to CSV if enabled
