@@ -14,6 +14,7 @@ func main() {
 	password := flag.String("password", "", "OBS WebSocket password")
 	host := flag.String("host", "localhost", "OBS WebSocket host")
 	port := flag.String("port", "4455", "OBS WebSocket port")
+	csvFile := flag.String("csv", "", "Optional CSV file to write metrics to")
 	flag.Parse()
 
 	if *password == "" {
@@ -25,6 +26,7 @@ func main() {
 	monitor, err := monitor.NewMonitor(monitor.ObsConnectionInfo{
 		Host:     fmt.Sprintf("%s:%s", *host, *port),
 		Password: *password,
+		CSVFile:  *csvFile,
 	})
 	if err != nil {
 		panic(err)
@@ -33,8 +35,10 @@ func main() {
 
 	fmt.Println("\nPress Ctrl-C to exit")
 
-	monitor.Start()
-	defer monitor.Close()
+	err = monitor.Start()
+	if err != nil {
+		fmt.Printf("Monitor error: %v\n", err)
+	}
 
 	waitForExit()
 }
