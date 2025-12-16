@@ -16,4 +16,7 @@ type MetricsData struct {
 	ObsCpuUsage         float64
 	ObsMemoryUsage      float64
 	ObsStatsError       error
+	SystemCpuUsage      float64
+	SystemMemoryUsage   float64
+	SystemMetricsError  error
 }
