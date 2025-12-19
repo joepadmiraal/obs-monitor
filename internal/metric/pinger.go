@@ -2,6 +2,7 @@ package metric
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -71,7 +72,7 @@ func (p *Pinger) ping(domain string) (time.Duration, error) {
 
 	pinger.Count = 1
 	pinger.Timeout = 1 * time.Second
-	pinger.SetPrivileged(false)
+	pinger.SetPrivileged(runtime.GOOS == "windows")
 
 	err = pinger.Run()
 	if err != nil {

@@ -10,7 +10,14 @@ import (
 	"github.com/joepadmiraal/obs-monitor/internal/monitor"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
+	versionFlag := flag.Bool("version", false, "Show version information")
 	password := flag.String("password", "", "OBS WebSocket password")
 	host := flag.String("host", "localhost", "OBS WebSocket host")
 	port := flag.String("port", "4455", "OBS WebSocket port")
@@ -18,6 +25,13 @@ func main() {
 	metricIntervalMs := flag.Int("metric-interval", 1000, "Metric collection interval in milliseconds (default 1000ms)")
 	writerIntervalMs := flag.Int("writer-interval", 1000, "Writer interval in milliseconds (default 1000ms)")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("obs-monitor %s\n", version)
+		fmt.Printf("  commit: %s\n", commit)
+		fmt.Printf("  built:  %s\n", date)
+		os.Exit(0)
+	}
 
 	if *password == "" {
 		fmt.Println("Usage: obs-monitor -password <password>")
