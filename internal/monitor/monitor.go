@@ -1,12 +1,14 @@
 package monitor
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/andreykaipov/goobs"
+	"github.com/andreykaipov/goobs/api/events"
 	"github.com/joepadmiraal/obs-monitor/internal/metric"
 	"github.com/joepadmiraal/obs-monitor/internal/writer"
 )
@@ -31,15 +33,22 @@ type Monitor struct {
 	consoleWriter  *writer.ConsoleWriter
 	metricInterval time.Duration
 	writerInterval time.Duration
+	ctx            context.Context
+	cancel         context.CancelFunc
+	shutdownDone   chan struct{}
 }
 
 // NewMonitor Connects to OBS and
 func NewMonitor(connectionInfo ObsConnectionInfo) (*Monitor, error) {
+	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Monitor{
 		connectionInfo: connectionInfo,
 		metricInterval: time.Duration(connectionInfo.MetricInterval) * time.Millisecond,
 		writerInterval: time.Duration(connectionInfo.WriterInterval) * time.Millisecond,
+		ctx:            ctx,
+		cancel:         cancel,
+		shutdownDone:   make(chan struct{}),
 	}, nil
 }
 
@@ -136,6 +145,9 @@ func (m *Monitor) Start() error {
 	// Start metrics collector
 	go m.collectAndWriteMetrics()
 
+	// Monitor for disconnection and OBS exit
+	go m.monitorConnection()
+
 	return nil
 }
 
@@ -185,7 +197,17 @@ func (m *Monitor) Close() {
 			fmt.Printf("Error closing CSV writer: %v\n", err)
 		}
 	}
-	m.client.Disconnect()
+	if m.client != nil {
+		m.client.Disconnect()
+	}
+}
+
+func (m *Monitor) Shutdown() {
+	m.cancel()
+}
+
+func (m *Monitor) Done() <-chan struct{} {
+	return m.shutdownDone
 }
 
 // collectAndWriteMetrics collects metrics from pingers, stream metrics, and system metrics and writes to CSV
@@ -193,14 +215,19 @@ func (m *Monitor) collectAndWriteMetrics() {
 	ticker := time.NewTicker(m.writerInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		obsRTT, obsErr := m.obsPinger.GetAndResetMaxRTT()
-		googleRTT, googleErr := m.googlePinger.GetAndResetMaxRTT()
-		streamData := m.streamMetrics.GetAndResetMaxValues()
-		obsStatsData := m.obsStats.GetAndResetMaxValues()
-		systemMetricsData := m.systemMetrics.GetAndResetMaxValues()
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-ticker.C:
+			obsRTT, obsErr := m.obsPinger.GetAndResetMaxRTT()
+			googleRTT, googleErr := m.googlePinger.GetAndResetMaxRTT()
+			streamData := m.streamMetrics.GetAndResetMaxValues()
+			obsStatsData := m.obsStats.GetAndResetMaxValues()
+			systemMetricsData := m.systemMetrics.GetAndResetMaxValues()
 
-		m.writeMetrics(obsRTT, obsErr, googleRTT, googleErr, streamData, obsStatsData, systemMetricsData)
+			m.writeMetrics(obsRTT, obsErr, googleRTT, googleErr, streamData, obsStatsData, systemMetricsData)
+		}
 	}
 }
 
@@ -234,6 +261,29 @@ func (m *Monitor) writeMetrics(obsRTT time.Duration, obsErr error, googleRTT tim
 	// Write to console
 	if err := m.consoleWriter.WriteMetrics(data); err != nil {
 		fmt.Printf("Error writing to console: %v\n", err)
+	}
+}
+
+func (m *Monitor) monitorConnection() {
+	defer close(m.shutdownDone)
+
+	listenDone := make(chan struct{})
+	go func() {
+		defer close(listenDone)
+		m.client.Listen(func(event any) {
+			switch event.(type) {
+			case *events.ExitStarted:
+				fmt.Println("\nOBS connection lost, closing obs-monitor...")
+				m.cancel()
+			}
+		})
+	}()
+
+	select {
+	case <-m.ctx.Done():
+		m.client.Disconnect()
+		<-listenDone
+	case <-listenDone:
 	}
 }
 

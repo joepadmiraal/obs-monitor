@@ -64,21 +64,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	waitForExit()
+	waitForExit(monitor)
 }
 
-func waitForExit() {
-	// Create a channel to wait for exit signal
-	done := make(chan bool, 1)
-
-	// Handle Ctrl-C
+func waitForExit(mon *monitor.Monitor) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		done <- true
-	}()
 
-	// Wait for exit signal
-	<-done
+	select {
+	case <-sigChan:
+		fmt.Println("\nReceived interrupt signal, shutting down...")
+		mon.Shutdown()
+		<-mon.Done()
+	case <-mon.Done():
+	}
 }
