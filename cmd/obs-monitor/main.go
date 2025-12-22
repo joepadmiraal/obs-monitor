@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/joepadmiraal/obs-monitor/internal/monitor"
+	"golang.org/x/term"
 )
 
 var (
@@ -21,7 +22,7 @@ func main() {
 	password := flag.String("password", "", "OBS WebSocket password")
 	host := flag.String("host", "localhost", "OBS WebSocket host")
 	port := flag.String("port", "4455", "OBS WebSocket port")
-	csvFile := flag.String("csv", "", "Optional CSV file to write metrics to")
+	csvFile := flag.String("csv", "obs-monitor.csv", "Optional CSV file to write metrics to")
 	metricIntervalMs := flag.Int("metric-interval", 1000, "Metric collection interval in milliseconds (default 1000ms)")
 	writerIntervalMs := flag.Int("writer-interval", 1000, "Writer interval in milliseconds (default 1000ms)")
 	flag.Parse()
@@ -34,9 +35,14 @@ func main() {
 	}
 
 	if *password == "" {
-		fmt.Println("Usage: obs-monitor -password <password>")
-		flag.PrintDefaults()
-		os.Exit(1)
+		fmt.Print("Enter OBS WebSocket password: ")
+		passwordBytes, err := term.ReadPassword(int(syscall.Stdin))
+		fmt.Println()
+		if err != nil {
+			fmt.Printf("Error reading password: %v\n", err)
+			os.Exit(1)
+		}
+		*password = string(passwordBytes)
 	}
 
 	if *metricIntervalMs > *writerIntervalMs {

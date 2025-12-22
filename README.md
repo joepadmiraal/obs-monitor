@@ -36,23 +36,23 @@ timestamp                 | obs_rtt_ms | google_rtt_ms | stream_active | output_
 
 ### Flags
 
-- `-password` (required): OBS WebSocket password
+- `-password` (optional): OBS WebSocket password, the program will ask for it if it's not provided
 - `-host` (optional): OBS WebSocket host (default: localhost)
 - `-port` (optional): OBS WebSocket port (default: 4455)
-- `-csv` (optional): CSV file to write metrics to
+- `-csv` (optional): CSV file to write metrics to, set to empty to prevent csv file generation (default: obs-monitor.csv)
 - `-metric-interval` (optional): Metric collection interval in milliseconds (default: 1000ms)
 - `-writer-interval` (optional): Writer interval in milliseconds (default: 1000ms)
 
 ## CSV Export
 
-When the `-csv` flag is provided, the monitor will write one line per second to the CSV file containing:
+The monitor will write one line per second to the CSV file containing:
 
 - `timestamp`: ISO 8601 timestamp
 - `obs_rtt_ms`: Round-trip time to the streaming server in milliseconds
 - `google_rtt_ms`: Round-trip time to Google in milliseconds
 - `stream_active`: Whether the stream is currently active
-- `output_bytes`: Total bytes sent to the streaming server
-- `output_skipped_frames`: Number of frames skipped
+- `output_bytes`: Total bytes sent to the streaming server during the writer-interval
+- `output_skipped_frames`: Number of frames skipped during the writer-interval
 - `stream_error`: Any error that occurred while getting stream status
 
 Example:
