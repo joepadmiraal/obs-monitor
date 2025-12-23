@@ -74,9 +74,6 @@ func (s *StreamMetrics) GetAndResetMaxValues() StreamMetricsData {
 	s.prevOutputBytes = maxBytes
 	s.prevSkippedFrames = maxSkipped
 	s.prevTotalFrames = maxTotalFrames
-	s.maxOutputBytes = maxBytes
-	s.maxSkippedFrames = maxSkipped
-	s.maxTotalFrames = maxTotalFrames
 	s.lastError = nil
 
 	return StreamMetricsData{
