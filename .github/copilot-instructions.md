@@ -10,7 +10,7 @@ It's used for monitoring low latency streams so we use a measurement interval of
 - Use idiomatic Go.
 
 ## Development
-- Always run `go test -race ./...` after you made changes to the source code.
+- Always run `go test -race ./...` and `go fmt ./...` after you made changes to the source code.
 
 ## Testing Best Practices
 1. **Isolation**: Mock all external dependencies (OBS WebSocket, network, system calls)

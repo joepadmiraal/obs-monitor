@@ -155,10 +155,10 @@ func TestCSVWriter_WriteMetrics_WithErrors(t *testing.T) {
 	streamErr := fmt.Errorf("stream error")
 
 	data := MetricsData{
-		Timestamp:      time.Date(2025, 12, 23, 10, 0, 0, 0, time.UTC),
-		ObsPingError:   obsErr,
-		StreamError:    streamErr,
-		StreamActive:   false,
+		Timestamp:    time.Date(2025, 12, 23, 10, 0, 0, 0, time.UTC),
+		ObsPingError: obsErr,
+		StreamError:  streamErr,
+		StreamActive: false,
 	}
 
 	err = cw.WriteMetrics(data)

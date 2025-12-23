@@ -161,3 +161,133 @@ func TestSystemMetrics_GetAndResetMaxValues_HighMemoryUsage(t *testing.T) {
 		t.Errorf("Expected MemoryUsage to be 99.9, got %f", data.MemoryUsage)
 	}
 }
+
+func TestSystemMetrics_MaxValueTracking(t *testing.T) {
+	tests := []struct {
+		name           string
+		currentMaxCpu  float64
+		currentMaxMem  float64
+		newCpu         float64
+		newMem         float64
+		expectedMaxCpu float64
+		expectedMaxMem float64
+	}{
+		{
+			name:           "new values higher than current max",
+			currentMaxCpu:  50.0,
+			currentMaxMem:  60.0,
+			newCpu:         75.5,
+			newMem:         85.2,
+			expectedMaxCpu: 75.5,
+			expectedMaxMem: 85.2,
+		},
+		{
+			name:           "new values lower than current max",
+			currentMaxCpu:  90.0,
+			currentMaxMem:  95.0,
+			newCpu:         60.0,
+			newMem:         70.0,
+			expectedMaxCpu: 90.0,
+			expectedMaxMem: 95.0,
+		},
+		{
+			name:           "mixed higher and lower values",
+			currentMaxCpu:  70.0,
+			currentMaxMem:  80.0,
+			newCpu:         75.0,
+			newMem:         75.0,
+			expectedMaxCpu: 75.0,
+			expectedMaxMem: 80.0,
+		},
+		{
+			name:           "zero to non-zero",
+			currentMaxCpu:  0,
+			currentMaxMem:  0,
+			newCpu:         45.5,
+			newMem:         55.3,
+			expectedMaxCpu: 45.5,
+			expectedMaxMem: 55.3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sm := &SystemMetrics{
+				maxCpuUsage:    tt.currentMaxCpu,
+				maxMemoryUsage: tt.currentMaxMem,
+			}
+
+			sm.mu.Lock()
+			if tt.newCpu > sm.maxCpuUsage {
+				sm.maxCpuUsage = tt.newCpu
+			}
+			if tt.newMem > sm.maxMemoryUsage {
+				sm.maxMemoryUsage = tt.newMem
+			}
+			sm.mu.Unlock()
+
+			if sm.maxCpuUsage != tt.expectedMaxCpu {
+				t.Errorf("Expected maxCpuUsage %f, got %f", tt.expectedMaxCpu, sm.maxCpuUsage)
+			}
+			if sm.maxMemoryUsage != tt.expectedMaxMem {
+				t.Errorf("Expected maxMemoryUsage %f, got %f", tt.expectedMaxMem, sm.maxMemoryUsage)
+			}
+		})
+	}
+}
+
+func TestSystemMetrics_ErrorHandlingDuringCollection(t *testing.T) {
+	sm := &SystemMetrics{
+		maxCpuUsage: 50.0,
+	}
+
+	testError := fmt.Errorf("system metrics collection error")
+
+	sm.mu.Lock()
+	sm.lastError = testError
+	sm.mu.Unlock()
+
+	sm.mu.Lock()
+	if sm.lastError != testError {
+		t.Error("Expected lastError to be set")
+	}
+	if sm.maxCpuUsage != 50.0 {
+		t.Error("Expected maxCpuUsage to remain unchanged after error")
+	}
+	sm.mu.Unlock()
+
+	data := sm.GetAndResetMaxValues()
+	if data.Error != testError {
+		t.Error("Expected error to be returned in data")
+	}
+}
+
+func TestSystemMetrics_ErrorHandlingContinuesCollection(t *testing.T) {
+	sm := &SystemMetrics{
+		maxCpuUsage: 30.0,
+	}
+
+	cpuError := fmt.Errorf("cpu collection error")
+
+	sm.mu.Lock()
+	sm.lastError = cpuError
+	sm.mu.Unlock()
+
+	sm.mu.Lock()
+	currentError := sm.lastError
+	sm.mu.Unlock()
+
+	if currentError != cpuError {
+		t.Error("Expected lastError to be set to CPU error")
+	}
+
+	memError := fmt.Errorf("memory collection error")
+	sm.mu.Lock()
+	sm.lastError = memError
+	sm.mu.Unlock()
+
+	data := sm.GetAndResetMaxValues()
+	if data.Error != memError {
+		t.Error("Expected error to be the last encountered error")
+	}
+}

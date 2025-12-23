@@ -156,3 +156,123 @@ func TestObsStats_GetAndResetMaxValues_SetsTimestamp(t *testing.T) {
 		t.Error("Expected timestamp to be set to current time")
 	}
 }
+
+func TestObsStats_MaxValueTracking(t *testing.T) {
+	tests := []struct {
+		name           string
+		currentMaxCpu  float64
+		currentMaxMem  float64
+		newCpu         float64
+		newMem         float64
+		expectedMaxCpu float64
+		expectedMaxMem float64
+	}{
+		{
+			name:           "new values higher than current max",
+			currentMaxCpu:  10.0,
+			currentMaxMem:  100.0,
+			newCpu:         25.5,
+			newMem:         512.0,
+			expectedMaxCpu: 25.5,
+			expectedMaxMem: 512.0,
+		},
+		{
+			name:           "new values lower than current max",
+			currentMaxCpu:  50.0,
+			currentMaxMem:  1024.0,
+			newCpu:         30.0,
+			newMem:         800.0,
+			expectedMaxCpu: 50.0,
+			expectedMaxMem: 1024.0,
+		},
+		{
+			name:           "mixed higher and lower values",
+			currentMaxCpu:  40.0,
+			currentMaxMem:  600.0,
+			newCpu:         45.0,
+			newMem:         500.0,
+			expectedMaxCpu: 45.0,
+			expectedMaxMem: 600.0,
+		},
+		{
+			name:           "zero to non-zero",
+			currentMaxCpu:  0,
+			currentMaxMem:  0,
+			newCpu:         15.5,
+			newMem:         256.0,
+			expectedMaxCpu: 15.5,
+			expectedMaxMem: 256.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			obs := &ObsStats{
+				maxObsCpuUsage:    tt.currentMaxCpu,
+				maxObsMemoryUsage: tt.currentMaxMem,
+			}
+
+			obs.mu.Lock()
+			if tt.newCpu > obs.maxObsCpuUsage {
+				obs.maxObsCpuUsage = tt.newCpu
+			}
+			if tt.newMem > obs.maxObsMemoryUsage {
+				obs.maxObsMemoryUsage = tt.newMem
+			}
+			obs.measurementCount++
+			obs.mu.Unlock()
+
+			if obs.maxObsCpuUsage != tt.expectedMaxCpu {
+				t.Errorf("Expected maxObsCpuUsage %f, got %f", tt.expectedMaxCpu, obs.maxObsCpuUsage)
+			}
+			if obs.maxObsMemoryUsage != tt.expectedMaxMem {
+				t.Errorf("Expected maxObsMemoryUsage %f, got %f", tt.expectedMaxMem, obs.maxObsMemoryUsage)
+			}
+			if obs.measurementCount != 1 {
+				t.Errorf("Expected measurementCount to be incremented to 1, got %d", obs.measurementCount)
+			}
+		})
+	}
+}
+
+func TestObsStats_ErrorHandlingDuringCollection(t *testing.T) {
+	obs := &ObsStats{
+		maxObsCpuUsage:   20.0,
+		measurementCount: 5,
+	}
+
+	testError := fmt.Errorf("stats collection error")
+
+	obs.mu.Lock()
+	obs.lastError = testError
+	obs.mu.Unlock()
+
+	obs.mu.Lock()
+	if obs.lastError != testError {
+		t.Error("Expected lastError to be set")
+	}
+	if obs.maxObsCpuUsage != 20.0 {
+		t.Error("Expected maxObsCpuUsage to remain unchanged after error")
+	}
+	obs.mu.Unlock()
+
+	data := obs.GetAndResetMaxValues()
+	if data.Error != testError {
+		t.Error("Expected error to be returned in data")
+	}
+}
+
+func TestObsStats_MeasurementCountIncrement(t *testing.T) {
+	obs := &ObsStats{
+		measurementCount: 5,
+	}
+
+	obs.mu.Lock()
+	obs.maxObsCpuUsage = 10.0
+	obs.measurementCount++
+	obs.mu.Unlock()
+
+	if obs.measurementCount != 6 {
+		t.Errorf("Expected measurementCount to be 6, got %d", obs.measurementCount)
+	}
+}
