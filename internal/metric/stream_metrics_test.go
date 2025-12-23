@@ -149,106 +149,6 @@ func TestStreamMetrics_NewStreamMetrics(t *testing.T) {
 	}
 }
 
-func TestStreamMetrics_MaxValueTracking(t *testing.T) {
-	tests := []struct {
-		name             string
-		currentMaxBytes  float64
-		currentMaxSkip   float64
-		currentMaxFrames float64
-		newBytes         float64
-		newSkip          float64
-		newFrames        float64
-		expectedMaxBytes float64
-		expectedMaxSkip  float64
-		expectedMaxFrame float64
-	}{
-		{
-			name:             "new values higher than current max",
-			currentMaxBytes:  1000.0,
-			currentMaxSkip:   10.0,
-			currentMaxFrames: 100.0,
-			newBytes:         2000.0,
-			newSkip:          20.0,
-			newFrames:        200.0,
-			expectedMaxBytes: 2000.0,
-			expectedMaxSkip:  20.0,
-			expectedMaxFrame: 200.0,
-		},
-		{
-			name:             "new values lower than current max",
-			currentMaxBytes:  5000.0,
-			currentMaxSkip:   50.0,
-			currentMaxFrames: 500.0,
-			newBytes:         3000.0,
-			newSkip:          30.0,
-			newFrames:        300.0,
-			expectedMaxBytes: 5000.0,
-			expectedMaxSkip:  50.0,
-			expectedMaxFrame: 500.0,
-		},
-		{
-			name:             "mixed higher and lower values",
-			currentMaxBytes:  2000.0,
-			currentMaxSkip:   25.0,
-			currentMaxFrames: 250.0,
-			newBytes:         2500.0,
-			newSkip:          20.0,
-			newFrames:        300.0,
-			expectedMaxBytes: 2500.0,
-			expectedMaxSkip:  25.0,
-			expectedMaxFrame: 300.0,
-		},
-		{
-			name:             "zero to non-zero",
-			currentMaxBytes:  0,
-			currentMaxSkip:   0,
-			currentMaxFrames: 0,
-			newBytes:         1000.0,
-			newSkip:          10.0,
-			newFrames:        100.0,
-			expectedMaxBytes: 1000.0,
-			expectedMaxSkip:  10.0,
-			expectedMaxFrame: 100.0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sm := &StreamMetrics{
-				maxOutputBytes:   tt.currentMaxBytes,
-				maxSkippedFrames: tt.currentMaxSkip,
-				maxTotalFrames:   tt.currentMaxFrames,
-			}
-
-			sm.mu.Lock()
-			if tt.newBytes > sm.maxOutputBytes {
-				sm.maxOutputBytes = tt.newBytes
-			}
-			if tt.newSkip > sm.maxSkippedFrames {
-				sm.maxSkippedFrames = tt.newSkip
-			}
-			if tt.newFrames > sm.maxTotalFrames {
-				sm.maxTotalFrames = tt.newFrames
-			}
-			sm.measurementCount++
-			sm.mu.Unlock()
-
-			if sm.maxOutputBytes != tt.expectedMaxBytes {
-				t.Errorf("Expected maxOutputBytes %f, got %f", tt.expectedMaxBytes, sm.maxOutputBytes)
-			}
-			if sm.maxSkippedFrames != tt.expectedMaxSkip {
-				t.Errorf("Expected maxSkippedFrames %f, got %f", tt.expectedMaxSkip, sm.maxSkippedFrames)
-			}
-			if sm.maxTotalFrames != tt.expectedMaxFrame {
-				t.Errorf("Expected maxTotalFrames %f, got %f", tt.expectedMaxFrame, sm.maxTotalFrames)
-			}
-			if sm.measurementCount != 1 {
-				t.Errorf("Expected measurementCount to be incremented to 1, got %d", sm.measurementCount)
-			}
-		})
-	}
-}
-
 func TestStreamMetrics_ErrorHandlingDuringCollection(t *testing.T) {
 	sm := &StreamMetrics{
 		maxOutputBytes:   1000.0,
@@ -321,5 +221,136 @@ func TestStreamMetrics_ActiveStateTracking(t *testing.T) {
 				t.Errorf("Expected Active to be %v, got %v", tt.expectedActive, data.Active)
 			}
 		})
+	}
+}
+
+func TestStreamMetrics_UpdateMetrics(t *testing.T) {
+	tests := []struct {
+		name                 string
+		initialMaxBytes      float64
+		initialMaxSkip       float64
+		initialMaxFrames     float64
+		initialMeasureCount  int
+		outputActive         bool
+		newBytes             float64
+		newSkip              float64
+		newFrames            float64
+		expectedMaxBytes     float64
+		expectedMaxSkip      float64
+		expectedMaxFrames    float64
+		expectedMeasureCount int
+		expectedActive       bool
+	}{
+		{
+			name:                 "first measurement with active stream",
+			initialMaxBytes:      0,
+			initialMaxSkip:       0,
+			initialMaxFrames:     0,
+			initialMeasureCount:  0,
+			outputActive:         true,
+			newBytes:             1000.0,
+			newSkip:              5.0,
+			newFrames:            100.0,
+			expectedMaxBytes:     1000.0,
+			expectedMaxSkip:      5.0,
+			expectedMaxFrames:    100.0,
+			expectedMeasureCount: 1,
+			expectedActive:       true,
+		},
+		{
+			name:                 "new max values",
+			initialMaxBytes:      1000.0,
+			initialMaxSkip:       10.0,
+			initialMaxFrames:     100.0,
+			initialMeasureCount:  1,
+			outputActive:         true,
+			newBytes:             2000.0,
+			newSkip:              20.0,
+			newFrames:            200.0,
+			expectedMaxBytes:     2000.0,
+			expectedMaxSkip:      20.0,
+			expectedMaxFrames:    200.0,
+			expectedMeasureCount: 2,
+			expectedActive:       true,
+		},
+		{
+			name:                 "values lower than max",
+			initialMaxBytes:      5000.0,
+			initialMaxSkip:       50.0,
+			initialMaxFrames:     500.0,
+			initialMeasureCount:  5,
+			outputActive:         true,
+			newBytes:             3000.0,
+			newSkip:              30.0,
+			newFrames:            300.0,
+			expectedMaxBytes:     5000.0,
+			expectedMaxSkip:      50.0,
+			expectedMaxFrames:    500.0,
+			expectedMeasureCount: 6,
+			expectedActive:       true,
+		},
+		{
+			name:                 "inactive stream",
+			initialMaxBytes:      2000.0,
+			initialMaxSkip:       20.0,
+			initialMaxFrames:     200.0,
+			initialMeasureCount:  2,
+			outputActive:         false,
+			newBytes:             2100.0,
+			newSkip:              21.0,
+			newFrames:            210.0,
+			expectedMaxBytes:     2100.0,
+			expectedMaxSkip:      21.0,
+			expectedMaxFrames:    210.0,
+			expectedMeasureCount: 3,
+			expectedActive:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sm := &StreamMetrics{
+				maxOutputBytes:   tt.initialMaxBytes,
+				maxSkippedFrames: tt.initialMaxSkip,
+				maxTotalFrames:   tt.initialMaxFrames,
+				measurementCount: tt.initialMeasureCount,
+			}
+
+			sm.updateMetrics(tt.outputActive, tt.newBytes, tt.newSkip, tt.newFrames)
+
+			if sm.maxOutputBytes != tt.expectedMaxBytes {
+				t.Errorf("Expected maxOutputBytes %f, got %f", tt.expectedMaxBytes, sm.maxOutputBytes)
+			}
+			if sm.maxSkippedFrames != tt.expectedMaxSkip {
+				t.Errorf("Expected maxSkippedFrames %f, got %f", tt.expectedMaxSkip, sm.maxSkippedFrames)
+			}
+			if sm.maxTotalFrames != tt.expectedMaxFrames {
+				t.Errorf("Expected maxTotalFrames %f, got %f", tt.expectedMaxFrames, sm.maxTotalFrames)
+			}
+			if sm.measurementCount != tt.expectedMeasureCount {
+				t.Errorf("Expected measurementCount %d, got %d", tt.expectedMeasureCount, sm.measurementCount)
+			}
+			if sm.lastActive != tt.expectedActive {
+				t.Errorf("Expected lastActive %v, got %v", tt.expectedActive, sm.lastActive)
+			}
+		})
+	}
+}
+
+func TestStreamMetrics_RecordError(t *testing.T) {
+	sm := &StreamMetrics{}
+
+	testError := fmt.Errorf("connection error")
+	sm.recordError(testError)
+
+	sm.mu.Lock()
+	if sm.lastError != testError {
+		t.Errorf("Expected lastError to be set to test error")
+	}
+	sm.mu.Unlock()
+
+	data := sm.GetAndResetMaxValues()
+	if data.Error != testError {
+		t.Error("Expected error to be returned in GetAndResetMaxValues")
 	}
 }

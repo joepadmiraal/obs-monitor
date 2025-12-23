@@ -49,6 +49,24 @@ func (s *SystemMetrics) GetAndResetMaxValues() SystemMetricsData {
 	}
 }
 
+func (s *SystemMetrics) updateMetrics(cpuUsage, memUsage float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if cpuUsage > s.maxCpuUsage {
+		s.maxCpuUsage = cpuUsage
+	}
+	if memUsage > s.maxMemoryUsage {
+		s.maxMemoryUsage = memUsage
+	}
+}
+
+func (s *SystemMetrics) recordError(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastError = err
+}
+
 func (s *SystemMetrics) Start() error {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -56,28 +74,17 @@ func (s *SystemMetrics) Start() error {
 	for range ticker.C {
 		cpuUsage, err := s.getCpuUsage()
 		if err != nil {
-			s.mu.Lock()
-			s.lastError = err
-			s.mu.Unlock()
+			s.recordError(err)
 			continue
 		}
 
 		memUsage, err := s.getMemoryUsage()
 		if err != nil {
-			s.mu.Lock()
-			s.lastError = err
-			s.mu.Unlock()
+			s.recordError(err)
 			continue
 		}
 
-		s.mu.Lock()
-		if cpuUsage > s.maxCpuUsage {
-			s.maxCpuUsage = cpuUsage
-		}
-		if memUsage > s.maxMemoryUsage {
-			s.maxMemoryUsage = memUsage
-		}
-		s.mu.Unlock()
+		s.updateMetrics(cpuUsage, memUsage)
 	}
 
 	return nil

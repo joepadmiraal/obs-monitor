@@ -86,6 +86,29 @@ func (s *StreamMetrics) GetAndResetMaxValues() StreamMetricsData {
 	}
 }
 
+func (s *StreamMetrics) updateMetrics(outputActive bool, outputBytes, skippedFrames, totalFrames float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.lastActive = outputActive
+	if outputBytes > s.maxOutputBytes {
+		s.maxOutputBytes = outputBytes
+	}
+	if skippedFrames > s.maxSkippedFrames {
+		s.maxSkippedFrames = skippedFrames
+	}
+	if totalFrames > s.maxTotalFrames {
+		s.maxTotalFrames = totalFrames
+	}
+	s.measurementCount++
+}
+
+func (s *StreamMetrics) recordError(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastError = err
+}
+
 func (s *StreamMetrics) Start() error {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -93,28 +116,13 @@ func (s *StreamMetrics) Start() error {
 	for range ticker.C {
 		status, err := s.client.Stream.GetStreamStatus()
 
-		s.mu.Lock()
 		if err != nil {
-			s.lastError = err
-		} else {
-			s.lastActive = status.OutputActive
-			if status.OutputBytes > s.maxOutputBytes {
-				s.maxOutputBytes = status.OutputBytes
-			}
-			if status.OutputSkippedFrames > s.maxSkippedFrames {
-				s.maxSkippedFrames = status.OutputSkippedFrames
-			}
-			if status.OutputTotalFrames > s.maxTotalFrames {
-				s.maxTotalFrames = status.OutputTotalFrames
-			}
-			s.measurementCount++
-		}
-		s.mu.Unlock()
-
-		if err != nil {
+			s.recordError(err)
 			fmt.Printf("Error getting stream status: %v\n", err)
 			continue
 		}
+
+		s.updateMetrics(status.OutputActive, status.OutputBytes, status.OutputSkippedFrames, status.OutputTotalFrames)
 	}
 
 	return nil

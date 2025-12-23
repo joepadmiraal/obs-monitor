@@ -51,6 +51,25 @@ func (s *ObsStats) GetAndResetMaxValues() ObsStatsData {
 	}
 }
 
+func (s *ObsStats) updateStats(cpuUsage, memoryUsage float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if cpuUsage > s.maxObsCpuUsage {
+		s.maxObsCpuUsage = cpuUsage
+	}
+	if memoryUsage > s.maxObsMemoryUsage {
+		s.maxObsMemoryUsage = memoryUsage
+	}
+	s.measurementCount++
+}
+
+func (s *ObsStats) recordError(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastError = err
+}
+
 func (s *ObsStats) Start() error {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -58,19 +77,12 @@ func (s *ObsStats) Start() error {
 	for range ticker.C {
 		stats, err := s.client.General.GetStats()
 
-		s.mu.Lock()
 		if err != nil {
-			s.lastError = err
-		} else {
-			if stats.CpuUsage > s.maxObsCpuUsage {
-				s.maxObsCpuUsage = stats.CpuUsage
-			}
-			if stats.MemoryUsage > s.maxObsMemoryUsage {
-				s.maxObsMemoryUsage = stats.MemoryUsage
-			}
-			s.measurementCount++
+			s.recordError(err)
+			continue
 		}
-		s.mu.Unlock()
+
+		s.updateStats(stats.CpuUsage, stats.MemoryUsage)
 	}
 
 	return nil
